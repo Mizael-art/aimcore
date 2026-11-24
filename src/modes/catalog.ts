@@ -105,7 +105,7 @@ export const SCENARIOS: ScenarioDef[] = [
   {
     id: 'entry', name: 'Entry Frag', mode: 'headshot', weapon: 'vandal', duration: 90,
     desc: 'Entrando no site: 3 inimigos saem de coberturas em ângulos diferentes. Limpe a onda.',
-    tags: ['Vandal', 'Ondas', 'Cobertura'], params: { layout: 'entry', peek: true, wave: true, count: 3, peekHoldMin: 600, peekHoldMax: 1400, respawnDelay: 1100 },
+    tags: ['Vandal', 'Ondas', 'WASD'], params: { movement: true, layout: 'entry', peek: true, wave: true, count: 3, peekHoldMin: 600, peekHoldMax: 1400, respawnDelay: 1100 },
   },
   {
     id: 'defensive', name: 'Defensive Aim', mode: 'headshot', weapon: 'vandal', duration: 60,
@@ -115,7 +115,7 @@ export const SCENARIOS: ScenarioDef[] = [
   {
     id: 'close', name: 'Close Range', mode: 'headshot', weapon: 'phantom', duration: 60,
     desc: 'Curta distância, alvos grandes e rápidos. Ajuste vertical e tracking curto.',
-    tags: ['Phantom', '4–8 m'], params: { minDist: 4, maxDist: 8, motion: 'strafe', strafeSpeed: 1.1, strafeRange: 2.2, boundYaw: 55 },
+    tags: ['Phantom', '4–8 m', 'WASD'], params: { movement: true, minDist: 4, maxDist: 8, motion: 'strafe', strafeSpeed: 1.1, strafeRange: 2.2, boundYaw: 55 },
   },
   {
     id: 'long', name: 'Long Range', mode: 'headshot', weapon: 'vandal', duration: 60,
@@ -125,7 +125,12 @@ export const SCENARIOS: ScenarioDef[] = [
   {
     id: 'strafing', name: 'Strafing Enemies', mode: 'headshot', weapon: 'vandal', duration: 60,
     desc: 'Inimigos fazendo ADAD com aceleração e counter-strafe realistas.',
-    tags: ['Vandal', 'ADAD'], params: { minDist: 12, maxDist: 22, motion: 'strafe', strafeSpeed: 1, strafeRange: 2.2, boundYaw: 35 },
+    tags: ['Vandal', 'ADAD', 'WASD'], params: { movement: true, minDist: 12, maxDist: 22, motion: 'strafe', strafeSpeed: 1, strafeRange: 2.2, boundYaw: 35 },
+  },
+  {
+    id: 'counterstrafe', name: 'Counter-Strafe', mode: 'headshot', weapon: 'vandal', duration: 60,
+    desc: 'Use A/D: o inimigo só aparece enquanto você se move. Pare com a tecla oposta e atire — tiro correndo é impreciso.',
+    tags: ['Vandal', 'WASD', 'Movimento'], params: { movement: true, requireMove: true, minDist: 10, maxDist: 20, motion: 'mixed', strafeSpeed: 0.7, boundYaw: 30, respawnDelay: 350 },
   },
 ];
 

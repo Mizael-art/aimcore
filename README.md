@@ -7,11 +7,21 @@ Aim trainer 3D de navegador focado em VALORANT: sensibilidade real do jogo, 7 mo
 ```bash
 npm install
 npm run dev      # desenvolvimento (http://localhost:5173)
-npm test         # 40 testes (matemática, colisão, bots jogando todos os modos, Sensitivity Lab)
+npm test         # 46 testes (matemática, colisão, bots jogando todos os modos, Sensitivity Lab)
 npm run build    # gera dist/index.html (arquivo único, abre direto no navegador)
 ```
 
 Use Chrome ou Edge para entrada bruta (`unadjustedMovement`). Firefox funciona, mas sem garantia de raw input — use a calibração.
+
+## Estilo VALORANT
+
+- Mapa **Range** (campo de treino claro com sombras) ou **Void** (sala escura), em Configurações.
+- Bots com silhueta de agente, cabeça na altura dos olhos e animação de queda.
+- Arma em primeira pessoa com recuo, muzzle flash, tracers e marcas de impacto.
+- Vandal, Phantom e Sheriff com padrão de spray (o 1º tiro é preciso, depois sobe e oscila), munição e recarga (R).
+- Movimento **WASD** + **Shift** nos cenários marcados: atirar correndo é impreciso; counter-strafe (tecla oposta) zera a imprecisão rápido. A barra MOV fica vermelha quando o tiro sai impreciso.
+- Mira com linhas internas/externas, erro de disparo e **importação de código de mira do VALORANT**.
+- Kill feed, contador de abates em sequência e cenário **Counter-Strafe**.
 
 ## Sensibilidade
 

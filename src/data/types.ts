@@ -22,6 +22,13 @@ export interface CrosshairSettings {
   innerGap: number;
   innerOpacity: number;
   showInner: boolean;
+  showOuter: boolean;
+  outerLength: number;
+  outerThickness: number;
+  outerGap: number;
+  outerOpacity: number;
+  /** linhas se afastam com o erro de disparo/movimento (como no VALORANT) */
+  firingError: boolean;
 }
 
 export interface Settings {
@@ -42,6 +49,11 @@ export interface Settings {
   targetColor: string;
   crosshair: CrosshairSettings;
   defaultDuration: number;
+  arena: 'range' | 'void';
+  shadows: boolean;
+  showWeapon: boolean;
+  /** permite WASD também nos cenários sem movimento obrigatório */
+  movementAlways: boolean;
 }
 
 export interface Trial {
@@ -83,6 +95,7 @@ export interface SessionRecord {
   trackingPct?: number;
   falseStarts?: number;
   crosshairPlacement?: number; // erro vertical médio (graus) no momento em que o alvo aparece
+  movingShots?: number; // tiros com imprecisão de movimento
   /** pontuações por segmento (para consistência intra-sessão) */
   segments: number[];
   trials?: Trial[];

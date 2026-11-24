@@ -1,7 +1,7 @@
 import { cmPer360, countsForCm, edpi, inPer360, roundSens, verticalFovFrom16x9 } from '../../core/sensitivity';
 import { defaultSettings, store } from '../../data/store';
 import type { CrosshairSettings, Settings } from '../../data/types';
-import { renderCrosshair } from '../../game/crosshair';
+import { parseValorantCode, renderCrosshair, toValorantCode } from '../../game/crosshair';
 import { MouseInput } from '../../game/input';
 import { esc, modal, onAct, toast } from '../dom';
 
@@ -58,6 +58,10 @@ export function renderSettings(root: HTMLElement) {
           <div class="field"><label>Resolução de renderização</label><select data-k="renderScale">${[1, 0.85, 0.75, 0.6, 0.5].map((v) => `<option value="${v}" ${v === store.settings.renderScale ? 'selected' : ''}>${Math.round(v * 100)}% ${v === 1 ? '(nativa)' : ''}</option>`).join('')}</select><div class="help">Reduza se não atingir ${'≥'}144 FPS.</div></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+          <div class="field"><label>Mapa</label><select data-k="arena"><option value="range" ${store.settings.arena === 'range' ? 'selected' : ''}>Range — campo de treino claro (estilo tático)</option><option value="void" ${store.settings.arena === 'void' ? 'selected' : ''}>Void — sala escura, sem distrações</option></select></div>
+          ${chk('shadows', 'Sombras (desligue se o FPS cair)')}
+          ${chk('showWeapon', 'Mostrar arma em primeira pessoa')}
+          ${chk('movementAlways', 'Permitir WASD em todos os cenários com arma', 'Por padrão só nos cenários marcados com WASD')}
           ${chk('antialias', 'Anti-aliasing (MSAA)')}
           ${chk('showFps', 'Mostrar FPS e taxa de eventos do mouse')}
           ${chk('fullscreenOnStart', 'Entrar em tela cheia ao iniciar um treino')}
@@ -72,7 +76,12 @@ export function renderSettings(root: HTMLElement) {
           ${xnum('innerGap', 'Distância do centro', 0, 20)} ${xnum('innerOpacity', 'Opacidade', 0.1, 1, 0.05)}
           ${xnum('dotSize', 'Ponto central', 1, 8)} ${xnum('outlineOpacity', 'Opacidade do contorno', 0, 1, 0.05)}
         </div>
-        <div style="display:flex;gap:22px;margin-top:14px;flex-wrap:wrap">${xchk('showInner', 'Linhas')} ${xchk('centerDot', 'Ponto central')} ${xchk('outline', 'Contorno')}</div></div>
+        <h3 style="margin-top:16px">Linhas externas</h3>
+        <div class="grid g2">${xnum('outerLength', 'Comprimento', 0, 20)} ${xnum('outerThickness', 'Espessura', 1, 10)} ${xnum('outerGap', 'Distância do centro', 0, 40)} ${xnum('outerOpacity', 'Opacidade', 0.05, 1, 0.05)}</div>
+        <div style="display:flex;gap:22px;margin-top:14px;flex-wrap:wrap">${xchk('showInner', 'Linhas internas')} ${xchk('showOuter', 'Linhas externas')} ${xchk('centerDot', 'Ponto central')} ${xchk('outline', 'Contorno')} ${xchk('firingError', 'Erro de disparo/movimento')}</div>
+        <div class="field" style="margin-top:16px"><label>Código de mira do VALORANT</label>
+          <div style="display:flex;gap:8px"><input type="text" id="xh-code" placeholder="0;P;c;5;h;0;0l;4;0o;2;0a;1;0f;0;1b;0" value=""><button class="btn" data-act="xh-import">Importar</button><button class="btn ghost" data-act="xh-export">Copiar código</button></div>
+          <div class="help">Cole o código exportado no VALORANT (Configurações → Mira → Importar/Exportar). Usa o perfil principal.</div></div></div>
     </div>
 
     <div class="grid g2" style="margin-top:16px">
@@ -195,6 +204,21 @@ export function renderSettings(root: HTMLElement) {
       store.updateSettings({ calibration: Math.round(f * 10000) / 10000 });
       (root.querySelector('#cal-cur') as HTMLElement).textContent = store.settings.calibration.toFixed(4);
       toast('Calibração aplicada', `Fator ${store.settings.calibration.toFixed(4)}. Repita 2–3 vezes para confirmar.`);
+    },
+    'xh-import': () => {
+      const code = (root.querySelector('#xh-code') as HTMLInputElement).value;
+      try {
+        store.updateSettings({ crosshair: parseValorantCode(code, store.settings.crosshair) });
+        toast('Mira importada', 'Código do VALORANT aplicado.');
+        window.dispatchEvent(new HashChangeEvent('hashchange'));
+      } catch (e) {
+        toast('Código inválido', String((e as Error).message));
+      }
+    },
+    'xh-export': () => {
+      const code = toValorantCode(store.settings.crosshair);
+      (root.querySelector('#xh-code') as HTMLInputElement).value = code;
+      navigator.clipboard?.writeText(code).then(() => toast('Copiado', code), () => toast('Código', code));
     },
     'cal-reset': () => {
       store.updateSettings({ calibration: 1 });

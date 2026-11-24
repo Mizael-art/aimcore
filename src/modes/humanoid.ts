@@ -224,7 +224,8 @@ export class HumanoidMode extends Mode {
           this.waveStart = this.time;
         }
         this.nextSpawn = Infinity;
-      } else {
+      } else if (!this.p('requireMove', false) || this.moveRatio > 0.55) {
+        // counter-strafe drill: o inimigo só aparece enquanto você está em movimento
         while (this.ctx.world.targets.length < count) this.spawn();
         this.nextSpawn = Infinity;
       }

@@ -82,6 +82,19 @@ class Sfx {
     this.tone(880, 0.12, 'sine', 0.25);
     setTimeout(() => this.tone(1320, 0.2, 'sine', 0.25), 110);
   }
+  /** disparo de arma: estalo + corpo grave (rifle) ou mais seco (pistola) */
+  gun(kind: 'rifle' | 'pistol' | 'none') {
+    if (kind === 'none') return this.shot();
+    this.noise(kind === 'rifle' ? 0.09 : 0.12, 0.32, kind === 'rifle' ? 900 : 600);
+    this.tone(kind === 'rifle' ? 110 : 80, kind === 'rifle' ? 0.08 : 0.12, 'triangle', 0.35, -40);
+  }
+  reload() {
+    this.tone(500, 0.05, 'square', 0.06);
+    setTimeout(() => this.tone(380, 0.05, 'square', 0.06), 260);
+  }
+  streak(n: number) {
+    for (let i = 0; i < Math.min(5, n); i++) setTimeout(() => this.tone(900 + i * 220, 0.08, 'sine', 0.2), i * 55);
+  }
   falseStart() {
     this.tone(160, 0.25, 'sawtooth', 0.12, -40);
   }

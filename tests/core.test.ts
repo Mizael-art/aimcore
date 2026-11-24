@@ -89,3 +89,78 @@ describe('análise de flick', () => {
     expect(a.over || a.under).toBe(false);
   });
 });
+
+import { Player, RUN_SPEED } from '../src/game/player';
+import { WEAPONS, WeaponState, ACCURATE_SPEED } from '../src/game/weapons';
+
+describe('movimento e armas estilo VALORANT', () => {
+  it('counter-strafe para mais rápido que soltar a tecla', () => {
+    const run = (counter: boolean) => {
+      const p = new Player();
+      p.zone = { minX: -100, maxX: 100, minZ: -100, maxZ: 100 };
+      p.keys.add('KeyD');
+      for (let i = 0; i < 60; i++) p.update(1 / 120, 0);
+      expect(p.speed).toBeCloseTo(RUN_SPEED, 3);
+      p.keys.clear();
+      if (counter) p.keys.add('KeyA');
+      let t = 0;
+      while (p.speedRatio > ACCURATE_SPEED && t < 2) {
+        p.update(1 / 120, 0);
+        t += 1 / 120;
+      }
+      return t;
+    };
+    const release = run(false);
+    const counter = run(true);
+    expect(counter).toBeLessThan(release);
+    expect(counter).toBeLessThan(0.1);
+  });
+  it('imprecisão some abaixo do limiar de velocidade', () => {
+    const w = new WeaponState(WEAPONS.vandal);
+    w.setMovement(1, false);
+    expect(w.moveErr).toBeCloseTo(WEAPONS.vandal.moveSpread);
+    w.setMovement(ACCURATE_SPEED - 0.01, false);
+    expect(w.moveErr).toBe(0);
+  });
+  it('spray sobe e reseta; munição acaba e recarrega', () => {
+    const w = new WeaponState(WEAPONS.vandal);
+    let t = 0;
+    expect(w.recoil()[0]).toBe(0); // primeiro tiro preciso
+    for (let i = 0; i < 8; i++) {
+      w.onShot(t);
+      t += WEAPONS.vandal.fireIntervalMs;
+      w.update(WEAPONS.vandal.fireIntervalMs / 1000, t);
+    }
+    expect(w.recoil()[0]).toBeGreaterThan(2);
+    for (let i = 0; i < 100; i++) {
+      t += 16;
+      w.update(0.016, t);
+    }
+    expect(w.recoil()[0]).toBe(0);
+    while (w.ammo > 0) w.onShot(t);
+    w.update(0.016, t);
+    expect(w.reloading).toBe(true);
+    w.update(0.016, t + WEAPONS.vandal.reloadMs + 1);
+    expect(w.ammo).toBe(25);
+  });
+});
+
+import { parseValorantCode, toValorantCode } from '../src/game/crosshair';
+import { defaultSettings } from '../src/data/store';
+
+describe('código de mira do VALORANT', () => {
+  it('importa e exporta ida-e-volta', () => {
+    const c = parseValorantCode('0;P;c;5;h;0;d;1;z;3;0l;4;0o;2;0a;1;0f;0;1b;0', defaultSettings().crosshair);
+    expect(c.color).toBe('#00ffff');
+    expect(c.outline).toBe(false);
+    expect(c.centerDot).toBe(true);
+    expect(c.innerLength).toBe(4);
+    expect(c.showOuter).toBe(false);
+    expect(c.firingError).toBe(false);
+    const back = parseValorantCode(toValorantCode(c), defaultSettings().crosshair);
+    expect(back).toEqual(c);
+  });
+  it('rejeita código inválido', () => {
+    expect(() => parseValorantCode('abc', defaultSettings().crosshair)).toThrow();
+  });
+});

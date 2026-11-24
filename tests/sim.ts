@@ -56,6 +56,8 @@ export function runBot(cfg: ModeConfig, o: BotOpts) {
   let holding = false;
   let guard = 0;
   while (!mode.done && guard++ < 200000) {
+    // simula strafe (counter-strafe drill): move sem alvo, para quando ele aparece
+    mode.moveRatio = world.targets.length ? 0 : 1;
     mode.tick(frame);
     const t = world.targets[0];
     if (!t) continue;
@@ -105,7 +107,7 @@ export function runBot(cfg: ModeConfig, o: BotOpts) {
       }
     } else if (cfg.mode === 'reaction') {
       mode.trigger(true, mode.time);
-    } else if (err < angR * (o.fireTol ?? 0.6) && mode.weapon.currentSpread() <= mode.weapon.w.baseSpread * 1.6 + 0.01) {
+    } else if (err < angR * (o.fireTol ?? 0.6) && mode.weapon.currentSpread() <= mode.weapon.w.baseSpread * 1.6 + 0.01 && mode.weapon.shotIdx < 0.5) {
       mode.trigger(true, mode.time);
       mode.trigger(false, mode.time);
     }

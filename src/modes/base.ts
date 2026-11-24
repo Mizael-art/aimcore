@@ -25,8 +25,16 @@ export interface WorldApi {
   setCovers(b: Box[]): void;
 }
 
+export interface ShotInfo {
+  dir: V3;
+  /** distância até o alvo atingido (null = não acertou alvo) */
+  hitT: number | null;
+  part?: HitPart;
+}
+
 export interface Feedback {
-  shot(): void;
+  shot(info?: ShotInfo): void;
+  reload?(ms: number): void;
   hit(t: Target, part: HitPart, kill: boolean): void;
   miss(): void;
   falseStart(): void;
@@ -76,6 +84,10 @@ export abstract class Mode {
   private segIdx = 0;
   readonly segCount = 6;
   placementErrs: number[] = [];
+  /** velocidade do jogador / velocidade de corrida (atualizado pelo engine) */
+  moveRatio = 0;
+  /** tiros disparados com imprecisão de movimento (sem counter-strafe) */
+  movingShots = 0;
 
   constructor(public cfg: ModeConfig) {
     this.rng = new Rng(cfg.seed);
@@ -108,7 +120,7 @@ export abstract class Mode {
   tick(dtMs: number) {
     if (this.done) return;
     this.time += dtMs;
-    this.weapon.update(dtMs / 1000);
+    this.weapon.update(dtMs / 1000, this.time);
     if (this.weapon.holding && this.weapon.w.auto && !this.continuous) {
       while (this.weapon.canFire(this.time) && this.weapon.holding) this.fire(this.time);
     }
@@ -146,19 +158,27 @@ export abstract class Mode {
     this.weapon.ads = on && this.weapon.w.zoom > 1;
   }
 
-  /** Dispara um raio do centro da mira (com spread da arma). */
+  /** Dispara um raio do centro da mira (padrão de recuo + spread + imprecisão de movimento). */
   fire(at: number) {
     this.shots++;
+    if (this.weapon.moveErr > 0) this.movingShots++;
+    const [rp, ry] = this.weapon.recoil();
     this.weapon.onShot(at);
-    this.ctx.fb.shot();
-    const sp = spreadDir(this.ctx.aim.yaw, this.ctx.aim.pitch, this.weaponSpreadForShot(), () => this.fxRng.next());
+    const baseYaw = this.ctx.aim.yaw + (ry * DEG) / Math.max(0.2, Math.cos(this.ctx.aim.pitch));
+    const basePitch = this.ctx.aim.pitch + rp * DEG;
+    const sp = spreadDir(baseYaw, basePitch, this.weaponSpreadForShot(), () => this.fxRng.next());
     const dir = dirFromYawPitch(sp.yaw, sp.pitch);
     const res = this.raycast(dir);
+    this.ctx.fb.shot({ dir, hitT: res ? res.t : null, part: res?.part });
     if (res) {
       this.onTargetHit(res.target, res.part, at);
     } else {
       this.onMissShot(at);
     }
+  }
+
+  reload() {
+    if (this.weapon.startReload(this.time)) this.ctx.fb.reload?.(this.weapon.w.reloadMs);
   }
 
   protected weaponSpreadForShot() {
@@ -250,6 +270,7 @@ export abstract class Mode {
       trials: this.trials.map((t) => ({ ...t, t: Math.round(t.t), dist: Math.round(t.dist * 100) / 100, stopErr: Math.round(t.stopErr * 100) / 100 })),
       crosshairPlacement: this.placementErrs.length ? meanSd(this.placementErrs).mean : undefined,
       completed: meta.completed,
+      movingShots: this.weapon.w.moveSpread > 0 ? this.movingShots : undefined,
       ...this.extraRecord(),
     };
   }

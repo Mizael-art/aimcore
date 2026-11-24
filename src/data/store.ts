@@ -20,6 +20,10 @@ export const defaultSettings = (): Settings => ({
   volume: 0.6,
   targetColor: '#ff4655',
   defaultDuration: 60,
+  arena: 'range',
+  shadows: true,
+  showWeapon: true,
+  movementAlways: false,
   crosshair: {
     color: '#00ff9c',
     outline: true,
@@ -31,6 +35,12 @@ export const defaultSettings = (): Settings => ({
     innerGap: 3,
     innerOpacity: 1,
     showInner: true,
+    showOuter: false,
+    outerLength: 2,
+    outerThickness: 2,
+    outerGap: 10,
+    outerOpacity: 0.35,
+    firingError: true,
   },
 });
 
