@@ -3,6 +3,8 @@ import { defaultSettings, store } from '../../data/store';
 import type { CrosshairSettings, Settings } from '../../data/types';
 import { parseValorantCode, renderCrosshair, toValorantCode } from '../../game/crosshair';
 import { MouseInput } from '../../game/input';
+import { KNIVES } from '../../game/viewmodel';
+import { startKnifePreviews } from '../knifePreview';
 import { esc, modal, onAct, toast } from '../dom';
 
 type NumKey = { [K in keyof Settings]: Settings[K] extends number ? K : never }[keyof Settings];
@@ -83,6 +85,10 @@ export function renderSettings(root: HTMLElement) {
           <div style="display:flex;gap:8px"><input type="text" id="xh-code" placeholder="0;P;c;5;h;0;0l;4;0o;2;0a;1;0f;0;1b;0" value=""><button class="btn" data-act="xh-import">Importar</button><button class="btn ghost" data-act="xh-export">Copiar código</button></div>
           <div class="help">Cole o código exportado no VALORANT (Configurações → Mira → Importar/Exportar). Usa o perfil principal.</div></div></div>
     </div>
+
+    <div class="card" style="margin-top:16px"><div class="card-head"><h2>Arsenal · Facas</h2><span class="muted" style="font-size:12px">tecla 3 no treino · F inspeciona · botão esq. corte, dir. estocada</span></div>
+      <div class="knife-grid">${KNIVES.map((k) => `<div class="knife-card ${store.settings.knife === k.id ? 'on' : ''}" data-act="knife" data-id="${k.id}"><canvas></canvas><b>${k.name}</b><span>${k.desc}</span></div>`).join('')}</div>
+      <p class="muted" style="font-size:12px;margin:12px 0 0">Modelos originais do AIMCORE. Nos cenários com arma: 1 primária · 2 Sheriff · 3 faca.</p></div>
 
     <div class="grid g2" style="margin-top:16px">
       <div class="card"><h2>Áudio e perfil</h2>
@@ -194,7 +200,12 @@ export function renderSettings(root: HTMLElement) {
     else showRead();
   };
 
+  const stopPreviews = startKnifePreviews([...root.querySelectorAll<HTMLCanvasElement>('.knife-card canvas')]);
   const offAct = onAct(root, {
+    knife: (el) => {
+      store.updateSettings({ knife: el.dataset.id! });
+      root.querySelectorAll('.knife-card').forEach((c) => c.classList.toggle('on', (c as HTMLElement).dataset.id === el.dataset.id));
+    },
     'cal-start': () => {
       if (!calib?.locked) void startCal();
     },
@@ -255,6 +266,7 @@ export function renderSettings(root: HTMLElement) {
 
   return () => {
     offAct();
+    stopPreviews();
     calib?.dispose();
     document.removeEventListener('keydown', onKey);
   };

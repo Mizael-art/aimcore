@@ -24,6 +24,7 @@ export const defaultSettings = (): Settings => ({
   shadows: true,
   showWeapon: true,
   movementAlways: false,
+  knife: 'tactical',
   crosshair: {
     color: '#00ff9c',
     outline: true,

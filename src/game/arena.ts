@@ -6,7 +6,7 @@ import type { Box } from './target';
  * - "range": campo de treino claro e estilizado (concreto, painéis, faixas de destaque, sol com sombras)
  * - "void": sala escura com grade, sem distrações (estilo aim trainer clássico)
  */
-export type ArenaTheme = 'range' | 'void';
+export type ArenaTheme = 'range' | 'void' | 'alley';
 
 export interface Arena {
   group: THREE.Group;
@@ -58,7 +58,143 @@ function label(text: string, color: string, bg: string) {
 }
 
 export function buildArena(scene: THREE.Scene, theme: ArenaTheme, shadows: boolean): Arena {
+  if (theme === 'alley') return buildAlley(scene, shadows);
   return theme === 'void' ? buildVoid(scene) : buildRange(scene, shadows);
+}
+
+// ---------------------------------------------------------------- ALLEY (Beco)
+/** Beco estreito de paredes de reboco terracota, para treinos de peek. Ambiente original. */
+function buildAlley(scene: THREE.Scene, shadows: boolean): Arena {
+  const group = new THREE.Group();
+  const solids: Box[] = [];
+  scene.background = canvasTex(256, (g, s) => {
+    const gr = g.createLinearGradient(0, 0, 0, s);
+    gr.addColorStop(0, '#8fb3cf');
+    gr.addColorStop(0.6, '#d9e1e4');
+    gr.addColorStop(1, '#efe3cf');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, s, s);
+  }, [1, 1]);
+  scene.fog = new THREE.Fog('#e6dccb', 50, 120);
+
+  const plaster = canvasTex(512, (g, s) => {
+    g.fillStyle = '#c4805a';
+    g.fillRect(0, 0, s, s);
+    noise(g, s, 22, 11);
+    // manchas de reboco
+    let x = 5;
+    for (let i = 0; i < 40; i++) {
+      x = (x * 16807) % 2147483647;
+      const px = (x % s);
+      x = (x * 16807) % 2147483647;
+      const py = (x % s);
+      g.fillStyle = i % 2 ? 'rgba(255,220,190,0.07)' : 'rgba(80,35,20,0.06)';
+      g.beginPath();
+      g.ellipse(px, py, 30 + (i % 7) * 9, 14 + (i % 5) * 6, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+  }, [1, 1]);
+  const stone = canvasTex(512, (g, s) => {
+    g.fillStyle = '#8f8a82';
+    g.fillRect(0, 0, s, s);
+    noise(g, s, 18, 4);
+    g.strokeStyle = 'rgba(40,36,32,0.35)';
+    g.lineWidth = 3;
+    for (let r = 0; r < 4; r++) {
+      const y = (r * s) / 4;
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(s, y);
+      g.stroke();
+      for (let c = 0; c < 3; c++) {
+        const xx = ((c + (r % 2) * 0.5) * s) / 3;
+        g.beginPath();
+        g.moveTo(xx, y);
+        g.lineTo(xx, y + s / 4);
+        g.stroke();
+      }
+    }
+  }, [8, 30]);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 120), new THREE.MeshStandardMaterial({ map: stone, roughness: 0.95 }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.z = -20;
+  floor.receiveShadow = true;
+  group.add(floor);
+
+  const wallMat = (w: number, h: number) => {
+    const t = plaster.clone();
+    t.repeat.set(w / 7, h / 7);
+    t.needsUpdate = true;
+    return new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 });
+  };
+  const trim = new THREE.MeshStandardMaterial({ color: '#e4b88f', roughness: 0.85 });
+  const dark = new THREE.MeshStandardMaterial({ color: '#3b2a22', roughness: 0.9 });
+  const wood = new THREE.MeshStandardMaterial({ color: '#7a5636', roughness: 0.8 });
+  const metal = new THREE.MeshStandardMaterial({ color: '#4f5660', roughness: 0.5, metalness: 0.4 });
+  const block = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, mat: THREE.Material, solid = true) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat);
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    m.castShadow = m.receiveShadow = shadows;
+    group.add(m);
+    if (solid) solids.push({ min: { x: x0, y: y0, z: z0 }, max: { x: x1, y: y1, z: z1 } });
+    return m;
+  };
+  // paredes do beco (alturas variadas para recortar o céu)
+  const segs: [number, number, number][] = [[4, -8, 7.5], [-8, -20, 9], [-20, -33, 6.5], [-33, -46, 8.5]];
+  for (const [z0, z1, h] of segs) {
+    block(-7, -5, 0, h, z1, z0, wallMat(Math.abs(z0 - z1), h));
+    block(6, 8, 0, h + 1.2, z1, z0, wallMat(Math.abs(z0 - z1), h + 1.2));
+    block(-5.15, -5, h - 0.35, h - 0.1, z1, z0, trim, false);
+    block(6, 6.15, h + 0.85, h + 1.1, z1, z0, trim, false);
+  }
+  block(-7, 8, 0, 10, -48, -46, wallMat(15, 10)); // fundo
+  block(-7, 8, 0, 8, 4, 6, wallMat(15, 8)); // atrás do jogador
+  // portas em arco e janelas (recuos escuros)
+  for (const [x, z, side] of [[-5, -14, 1], [6, -24, -1], [-5, -38, 1], [6, -8, -1]] as const) {
+    const xx = side > 0 ? x : x - 0.02;
+    block(side > 0 ? xx : xx - 0.12, side > 0 ? xx + 0.12 : xx, 0, 2.6, z - 0.9, z + 0.9, dark, false);
+    block(side > 0 ? xx : xx - 0.22, side > 0 ? xx + 0.22 : xx, 2.6, 2.85, z - 1.1, z + 1.1, trim, false);
+  }
+  for (const [x, z, y] of [[-5, -6, 4.2], [6, -16, 5], [-5, -26, 3.8], [6, -31, 4.6], [-5, -42, 5.2]] as const) {
+    block(x > 0 ? x - 0.05 : x, x > 0 ? x : x + 0.05, y, y + 1.1, z - 0.55, z + 0.55, dark, false);
+    block(x > 0 ? x - 0.18 : x, x > 0 ? x : x + 0.18, y - 0.12, y, z - 0.7, z + 0.7, trim, false);
+  }
+  // barris e caixotes junto às paredes (decoração sólida)
+  const barrelGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.1, 14);
+  for (const [x, z] of [[-4.4, -4.2], [-4.4, -5.1], [5.4, -27.8], [5.4, -40]] as const) {
+    const b = new THREE.Mesh(barrelGeo, wood);
+    b.position.set(x, 0.55, z);
+    b.castShadow = b.receiveShadow = shadows;
+    group.add(b);
+    solids.push({ min: { x: x - 0.4, y: 0, z: z - 0.4 }, max: { x: x + 0.4, y: 1.1, z: z + 0.4 } });
+  }
+  // caixas de cobertura do modo (as mesmas medidas das covers do layout 'alley', só o visual de madeira fica por conta das covers)
+  // tubulação e toldo
+  block(5.6, 5.8, 0, 7, -12.2, -12, metal, false);
+  block(5.2, 6, 3.1, 3.2, -25.5, -22.5, new THREE.MeshStandardMaterial({ color: '#2bb5a6', roughness: 0.7 }), false);
+  // torre ao fundo (silhueta)
+  block(-2, 3, 10, 22, -60, -56, wallMat(5, 12), false);
+
+  const hemi = new THREE.HemisphereLight('#e9eef3', '#8a6a52', 1.05);
+  const sun = new THREE.DirectionalLight('#ffe9cc', 2.4);
+  sun.position.set(18, 40, 8);
+  sun.target.position.set(0, 0, -20);
+  if (shadows) {
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    const c = sun.shadow.camera;
+    c.left = -30;
+    c.right = 30;
+    c.top = 40;
+    c.bottom = -40;
+    c.near = 1;
+    c.far = 120;
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.02;
+  }
+  group.add(hemi, sun, sun.target);
+  scene.add(group);
+  return { group, solids, dispose: disposer(group, scene) };
 }
 
 function disposer(group: THREE.Group, scene: THREE.Scene) {

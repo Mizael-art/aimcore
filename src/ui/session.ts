@@ -49,6 +49,7 @@ export function resultsHtml(r: SessionRecord, extra: { xp?: number; isPB?: boole
     cells.push(['Precisão', pct(r.accuracy)], ['Acertos', fmtInt(r.hits)], ['Erros', fmtInt(r.misses)], [r.mode === 'switching' ? 'Tempo de troca' : 'Tempo por alvo', ms(r.avgTime), r.sdTime ? `± ${Math.round(r.sdTime)} ms` : '']);
     if (r.trialsCount) cells.push(['Overshoot', pct(r.overshoots / r.trialsCount, 0), `${r.overshoots} de ${r.trialsCount}`], ['Undershoot', pct(r.undershoots / r.trialsCount, 0), `${r.undershoots} de ${r.trialsCount}`]);
     if (r.mode === 'headshot') cells.push(['Headshot %', pct(r.hits ? r.headshots / r.hits : 0, 0), `${r.headshots} HS · ${r.bodyshots} corpo`]);
+    if (r.deaths != null) cells.push(['Mortes', String(r.deaths), 'vezes que você ficou exposto tempo demais']);
     if (r.movingShots != null && r.shots) cells.push(['Tiros correndo', pct(r.movingShots / r.shots, 0), `${r.movingShots} de ${r.shots} sem counter-strafe`]);
     if (r.crosshairPlacement != null) cells.push(['Erro de pré-mira', `${r.crosshairPlacement.toFixed(2)}°`, 'distância da mira à cabeça no spawn']);
     cells.push(['Consistência', cons.toFixed(0), 'variação entre trechos da sessão']);

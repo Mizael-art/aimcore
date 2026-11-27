@@ -1,4 +1,4 @@
-import { DEG, wrapAngle } from '../core/geometry';
+import { DEG, rayAabb, wrapAngle } from '../core/geometry';
 import { meanSd } from '../core/flick';
 import { Rng } from '../core/rng';
 import { HUMANOID, Target, type Box, type HitPart } from '../game/target';
@@ -39,6 +39,12 @@ export class HumanoidMode extends Mode {
   private escapes = 0;
   private killTimes: number[] = [];
   private edges: { x: number; z: number; dir: number }[] = [];
+  /** posições fixas de inimigos segurando ângulo (mapa Beco) */
+  private spots: { x: number; z: number }[] = [];
+  private lastSpot = -1;
+  private invulnUntil = 0;
+  /** tempo exposto até cada abate no duelo (ms) */
+  exposures: number[] = [];
 
   protected setup() {
     this.buildCovers();
@@ -55,6 +61,17 @@ export class HumanoidMode extends Mode {
       covers.push({ min: { x: -9, y: 0, z: z - 0.6 }, max: { x: -1.6, y: 3, z: z + 0.6 } });
       covers.push({ min: { x: 1.6, y: 0, z: z - 0.6 }, max: { x: 9, y: 3, z: z + 0.6 } });
       this.edges.push({ x: -1.6, z: z - 1.4, dir: 1 }, { x: 1.6, z: z - 1.4, dir: -1 });
+    } else if (layout === 'alley') {
+      // sua cobertura: parede à frente/esquerda; o beco segue para -Z
+      covers.push({ min: { x: -5, y: 0, z: -2.6 }, max: { x: 0.4, y: 3.2, z: -1.6 } });
+      // caixas encostadas nas paredes do beco
+      covers.push({ min: { x: -5, y: 0, z: -11 }, max: { x: -3.6, y: 1.3, z: -9.6 } });
+      covers.push({ min: { x: 4.6, y: 0, z: -19 }, max: { x: 6, y: 1.5, z: -17.4 } });
+      covers.push({ min: { x: -5, y: 0, z: -29 }, max: { x: -3.4, y: 1.9, z: -27.2 } });
+      this.spots = [
+        { x: 2.6, z: -13 }, { x: -2.6, z: -17 }, { x: 4.4, z: -22 }, { x: 0.6, z: -26 },
+        { x: -2.2, z: -31 }, { x: 3.4, z: -35 }, { x: 5.2, z: -11 }, { x: -0.8, z: -21 },
+      ];
     } else if (layout === 'entry') {
       // várias coberturas em ângulos diferentes (site)
       const spots: [number, number, number][] = [
@@ -80,7 +97,13 @@ export class HumanoidMode extends Mode {
     let x: number;
     let z: number;
     let peek: { dir: number } | null = null;
-    if (this.edges.length && this.p('peek', true)) {
+    if (this.spots.length) {
+      let i = this.rng.int(0, this.spots.length - 1);
+      if (i === this.lastSpot) i = (i + 1) % this.spots.length;
+      this.lastSpot = i;
+      x = this.spots[i].x;
+      z = this.spots[i].z;
+    } else if (this.edges.length && this.p('peek', true)) {
       const free = this.edges.filter((ed) => ![...this.moves.values()].some((m) => Math.abs(m.originZ - ed.z) < 0.5 && Math.abs(m.originX - (ed.x - ed.dir * 0.6)) < 0.5));
       const edge = this.rng.pick(free.length ? free : this.edges);
       x = edge.x - edge.dir * 0.6; // começa escondido atrás da borda
@@ -126,7 +149,7 @@ export class HumanoidMode extends Mode {
       ms.peekOut = this.rng.range(0.9, 2.2);
       ms.min = -0.2;
       ms.max = ms.peekOut + 0.6;
-    } else if (!moving) {
+    } else if (!moving || this.spots.length) {
       ms.min = ms.max = 0;
     }
     this.moves.set(t, ms);
@@ -230,6 +253,7 @@ export class HumanoidMode extends Mode {
         this.nextSpawn = Infinity;
       }
     }
+    if (this.p('duel', false)) this.duel(dt);
     const life = this.p('lifetime', 0);
     for (const t of [...this.ctx.world.targets]) {
       const ms = this.moves.get(t);
@@ -238,16 +262,72 @@ export class HumanoidMode extends Mode {
     }
   }
 
+  /** linha de visão entre a cabeça do inimigo e seus olhos (bloqueada por coberturas) */
+  private lineOfSight(t: Target) {
+    const h = t.aimPoint();
+    const e = this.ctx.world.eye;
+    const dx = e.x - h.x;
+    const dy = e.y - h.y;
+    const dz = e.z - h.z;
+    const len = Math.hypot(dx, dy, dz);
+    const d = { x: dx / len, y: dy / len, z: dz / len };
+    for (const b of this.ctx.world.covers) {
+      const tb = rayAabb(h, d, b.min, b.max);
+      if (tb >= 0 && tb < len) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Duelo: o inimigo segura o ângulo. Se você ficar visível por mais tempo que a reação dele,
+   * ele acerta você. Peek rápido (swing) aumenta a reação dele, como a vantagem de quem dá peek.
+   */
+  private duel(dt: number) {
+    for (const t of [...this.ctx.world.targets]) {
+      const vis = this.lineOfSight(t);
+      if (!vis) {
+        t.data.exposed = Math.max(0, (t.data.exposed ?? 0) - dt * 2);
+        continue;
+      }
+      if (!t.data.seen) {
+        // primeira vez que se veem: inicia cronômetro e define a reação do bot
+        t.data.seen = 1;
+        t.shownAt = this.time;
+        t.data.startYaw = this.ctx.aim.yaw;
+        t.data.startPitch = this.ctx.aim.pitch;
+        const swing = this.moveRatio > 0.6 ? this.p('swingBonus', 140) : 0;
+        t.data.reaction = this.p('botReaction', 420) + swing + this.rng.range(-70, 90);
+        const hp = this.angTo(t.aimPoint());
+        this.placementErrs.push(Math.hypot(wrapAngle(this.ctx.aim.yaw - hp.yaw) * Math.cos(hp.pitch), this.ctx.aim.pitch - hp.pitch) / DEG);
+      }
+      t.data.exposed = (t.data.exposed ?? 0) + dt;
+      if (t.data.exposed >= t.data.reaction && this.time >= this.invulnUntil) {
+        this.deaths++;
+        this.score -= 150;
+        this.invulnUntil = this.time + 900;
+        this.ctx.fb.playerKilled?.(t);
+        for (const o of this.ctx.world.targets) o.data.exposed = 0;
+        // o inimigo troca de posição para o próximo duelo
+        this.moves.delete(t);
+        this.ctx.world.removeTarget(t, false);
+        this.nextSpawn = this.time + this.p('respawnDelay', 600);
+        return;
+      }
+    }
+  }
+
   protected onTargetHit(t: Target, part: HitPart, at: number) {
     const w = this.weapon.w;
+    const knife = w.kind === 'knife';
+    const dmg = knife && this.meleeHeavy ? w.heavyDmg ?? w.bodyDmg : part === 'head' ? w.headDmg : w.bodyDmg;
     if (part === 'head') {
       this.hits++;
       this.headshots++;
-      t.hp -= w.headDmg;
+      t.hp -= dmg;
     } else {
       this.hits++;
       this.bodyshots++;
-      t.hp -= w.bodyDmg;
+      t.hp -= dmg;
       this.score += w.bodyDmg > 0 ? 5 : -10;
     }
     const kill = t.hp <= 0;
@@ -255,6 +335,7 @@ export class HumanoidMode extends Mode {
     if (kill) {
       const ttk = at - t.shownAt;
       this.killTimes.push(ttk);
+      if (this.p('duel', false)) this.exposures.push(t.data.exposed ?? 0);
       this.score += 100 + (part === 'head' ? 50 : 0) + 50 * Math.max(0, 1 - ttk / 1500);
       this.recordFlick(t.shownAt, { yaw: t.data.startYaw, pitch: t.data.startPitch }, t, true, at);
       this.remove(t, true);
@@ -297,7 +378,7 @@ export class HumanoidMode extends Mode {
   hud() {
     const h = super.hud();
     const hs = this.hits ? Math.round((this.headshots / this.hits) * 100) : 0;
-    h.extra = `${this.killTimes.length} kills · HS ${hs}%`;
+    h.extra = `${this.killTimes.length} kills · HS ${hs}%${this.p('duel', false) ? ` · ${this.deaths} mortes` : ''}`;
     return h;
   }
 

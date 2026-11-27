@@ -6,7 +6,7 @@ import type { SessionRecord, Settings } from '../data/types';
 import type { Mode, ModeConfig, ShotInfo } from '../modes/base';
 import { createMode } from '../modes/catalog';
 import { ReactionMode } from '../modes/reaction';
-import { buildArena, rayEnvironment, type Arena } from './arena';
+import { buildArena, rayEnvironment, type Arena, type ArenaTheme } from './arena';
 import { sfx } from './audio';
 import { createBot, type BotMesh } from './botmodel';
 import { renderCrosshair } from './crosshair';
@@ -14,7 +14,8 @@ import { Effects } from './effects';
 import { MouseInput } from './input';
 import { Player } from './player';
 import { type Box, type HitPart, Target } from './target';
-import { ViewModel } from './viewmodel';
+import { ViewModel, type VmKind } from './viewmodel';
+import { WEAPONS } from './weapons';
 import { LogicWorld } from './world';
 
 export interface RunOptions {
@@ -32,6 +33,8 @@ export interface RunResult {
 
 const MAX_PITCH = (89 * Math.PI) / 180;
 const MOVE_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD']);
+const CROUCH_KEYS = new Set(['KeyC', 'ControlLeft']);
+const SLOT_KEYS: Record<string, number> = { Digit1: 0, Digit2: 1, Digit3: 2 };
 
 /**
  * Engine 3D: renderização (Three.js), entrada relativa, movimento e ciclo de jogo.
@@ -77,6 +80,10 @@ export class Engine {
   private killStreakT = 0;
   private sphereGeo = new THREE.SphereGeometry(1, 32, 20);
   private coverMat = new THREE.MeshStandardMaterial({ color: '#4d5560', roughness: 0.75 });
+  private plasterMat = new THREE.MeshStandardMaterial({ color: '#b8744e', roughness: 0.9 });
+  private crateMat = new THREE.MeshStandardMaterial({ color: '#7a5a3a', roughness: 0.8 });
+  private theme: ArenaTheme = 'range';
+  private startPos = { x: 0, z: 0 };
   private tmpV = new THREE.Vector3();
   private hud!: Record<string, HTMLElement>;
 
@@ -93,7 +100,7 @@ export class Engine {
         <div class="hud-bar"><i data-h="bar"></i></div>
         <div class="hud-extra" data-h="extra"></div>
         <div class="killfeed" data-h="feed"></div>
-        <div class="hud-weapon" data-h="weapon"><div class="hw-name" data-h="wname"></div><div class="hw-ammo"><b data-h="ammo">0</b><span data-h="reserve">/ ∞</span></div><div class="hw-reload" data-h="reload"><i></i></div></div>
+        <div class="hud-weapon" data-h="weapon"><div class="hw-slots" data-h="slots"></div><div class="hw-name" data-h="wname"></div><div class="hw-ammo"><b data-h="ammo">0</b><span data-h="reserve">/ ∞</span></div><div class="hw-reload" data-h="reload"><i></i></div></div>
         <div class="hud-move" data-h="move"><span>MOV</span><i data-h="movebar"></i></div>
         <div class="streak" data-h="streak"></div>
         <div class="hud-corner" data-h="corner"></div>
@@ -102,6 +109,7 @@ export class Engine {
       <div class="xh-wrap"><div data-h="xh"></div><div class="hitmarker" data-h="hm"></div></div>
       <div class="hud-msg" data-h="msg"></div>
       <div class="hud-count" data-h="count"></div>
+      <div class="death-flash" data-h="death"></div>
       <div class="overlay" data-h="overlay"></div>`;
     this.hud = {};
     this.root.querySelectorAll<HTMLElement>('[data-h]').forEach((e) => (this.hud[e.dataset.h!] = e));
@@ -132,11 +140,11 @@ export class Engine {
   }
 
   private ensureArena() {
-    const key = `${this.settings.arena}|${this.settings.shadows}`;
+    const key = `${this.theme}|${this.settings.shadows}`;
     if (key === this.arenaKey && this.arena) return;
     this.arena?.dispose();
-    this.arena = buildArena(this.scene, this.settings.arena, this.settings.shadows);
-    this.renderer.shadowMap.enabled = this.settings.shadows && this.settings.arena === 'range';
+    this.arena = buildArena(this.scene, this.theme, this.settings.shadows);
+    this.renderer.shadowMap.enabled = this.settings.shadows && this.theme !== 'void';
     this.renderer.shadowMap.needsUpdate = true;
     this.arenaKey = key;
   }
@@ -232,7 +240,8 @@ export class Engine {
       const w = b.max.x - b.min.x;
       const h = b.max.y - b.min.y;
       const d = b.max.z - b.min.z;
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), this.coverMat);
+      const mat = this.theme === 'alley' ? (h > 2.5 ? this.plasterMat : this.crateMat) : this.coverMat;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       m.position.set((b.min.x + b.max.x) / 2, (b.min.y + b.max.y) / 2, (b.min.z + b.max.z) / 2);
       m.castShadow = m.receiveShadow = this.settings.shadows;
       this.scene.add(m);
@@ -252,6 +261,7 @@ export class Engine {
       this.createRenderer(this.settings.antialias);
       this.arenaKey = '';
     }
+    this.theme = (cfg.params?.map as ArenaTheme) ?? this.settings.arena;
     this.ensureArena();
     this.vfov = verticalFovFrom16x9(this.settings.hfov);
     this.sensCfg = {
@@ -266,10 +276,14 @@ export class Engine {
     this.hud.fps.style.display = this.settings.showFps ? '' : 'none';
     this.effects.clear();
     this.world.clear();
-    this.player.reset();
-    this.world.eye.x = 0;
-    this.world.eye.z = 0;
-    this.aim.yaw = 0;
+    const pr = cfg.params ?? {};
+    this.startPos = { x: Number(pr.startX ?? 0), z: Number(pr.startZ ?? 0) };
+    this.player.zone = { minX: Number(pr.zoneMinX ?? -4), maxX: Number(pr.zoneMaxX ?? 4), minZ: Number(pr.zoneMinZ ?? -2), maxZ: Number(pr.zoneMaxZ ?? 2) };
+    this.player.reset(this.startPos.x, this.startPos.z);
+    this.world.eye.x = this.startPos.x;
+    this.world.eye.y = 1.6;
+    this.world.eye.z = this.startPos.z;
+    this.aim.yaw = (Number(cfg.params?.startYaw ?? 0) * Math.PI) / 180;
     this.aim.pitch = 0;
     this.ads = false;
     this.kills = 0;
@@ -279,16 +293,17 @@ export class Engine {
     const w = this.mode.weapon.w;
     const isWeapon = w.kind !== 'none';
     this.movement = !!cfg.params?.movement || (isWeapon && this.settings.movementAlways);
-    this.vm.setWeapon(isWeapon && this.settings.showWeapon ? w.kind : 'none', this.settings.targetColor);
+    this.equipView(w.id, 0);
     this.root.classList.toggle('has-weapon', isWeapon);
     this.root.classList.toggle('has-move', this.movement);
-    this.hud.wname.textContent = w.name.toUpperCase();
-    this.hud.corner.textContent = `${cfg.label}${opt.subtitle ? ' · ' + opt.subtitle : ''} · ${opt.blind ? 'sens oculta' : 'sens ' + this.sensCfg.sens.toFixed(3)} · ${this.sensCfg.dpi} DPI${this.movement ? ' · WASD/Shift · R recarrega' : isWeapon ? ' · R recarrega' : ''}`;
+    this.hud.corner.textContent = `${cfg.label}${opt.subtitle ? ' · ' + opt.subtitle : ''} · ${opt.blind ? 'sens oculta' : 'sens ' + this.sensCfg.sens.toFixed(3)} · ${this.sensCfg.dpi} DPI${this.movement ? ' · WASD · Shift · Espaço · C' : ''}${isWeapon ? ' · 1/2/3 armas · R recarrega · F inspeciona' : ''}`;
     this.mode.init({
       world: this.world,
       aim: this.aim,
       fb: {
         shot: (info) => this.onShot(info),
+        equip: (id) => this.equipView(id, WEAPONS[id]?.equipMs ?? 500),
+        playerKilled: () => this.onPlayerKilled(),
         reload: (ms) => {
           this.vm.reload(ms);
           sfx.reload();
@@ -372,6 +387,7 @@ export class Engine {
   private onDown = (button: number, t: number) => {
     if (this.state !== 'running' || !this.mode) return;
     if (button === 0) this.mode.trigger(true, this.gameNow(t));
+    else if (button === 2 && this.mode.weapon.w.kind === 'knife') this.mode.heavyMelee(this.gameNow(t));
     else if (button === 2 && this.mode.weapon.w.zoom > 1) {
       this.ads = true;
       this.mode.setAds(true);
@@ -397,7 +413,15 @@ export class Engine {
         this.player.keys.add(e.code);
         e.preventDefault();
       } else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.player.walking = true;
-      else if (e.code === 'KeyR' && this.state === 'running') this.mode?.reload();
+      else if (CROUCH_KEYS.has(e.code) && this.movement) {
+        this.player.crouching = true;
+        e.preventDefault();
+      } else if (e.code === 'Space' && this.movement) {
+        if (!e.repeat) this.player.jump();
+        e.preventDefault();
+      } else if (e.code === 'KeyR' && this.state === 'running') this.mode?.reload();
+      else if (e.code in SLOT_KEYS && this.state === 'running') this.mode?.switchSlot(SLOT_KEYS[e.code]);
+      else if (e.code === 'KeyF' && this.state === 'running') this.vm.inspect();
       return;
     }
     if (this.state === 'paused' || this.state === 'await') {
@@ -416,9 +440,43 @@ export class Engine {
   private onKeyUp = (e: KeyboardEvent) => {
     if (MOVE_KEYS.has(e.code)) this.player.keys.delete(e.code);
     else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.player.walking = false;
+    else if (CROUCH_KEYS.has(e.code)) this.player.crouching = false;
   };
 
+  private equipView(id: string, equipMs: number) {
+    const w = WEAPONS[id] ?? WEAPONS.trainer;
+    const kind = (w.kind === 'none' || !this.settings.showWeapon ? 'none' : w.kind) as VmKind;
+    this.vm.setWeapon(kind, this.settings.targetColor, this.settings.knife, equipMs);
+    if (this.ads) {
+      this.ads = false;
+      this.root.classList.remove('ads');
+      this.applyFov();
+    }
+    this.hud.wname.textContent = w.kind === 'knife' ? `FACA · ${knifeName(this.settings.knife)}` : w.name.toUpperCase();
+    const slots = this.mode?.slots ?? [];
+    this.hud.slots.innerHTML = slots.map((sid, i) => `<span class="${sid === id ? 'on' : ''}">${i + 1} ${WEAPONS[sid].kind === 'knife' ? 'FACA' : WEAPONS[sid].name.toUpperCase()}</span>`).join('');
+    this.root.classList.toggle('knife', w.kind === 'knife');
+    this.lastHud = '';
+    if (equipMs > 0) sfx.equip(w.kind);
+  }
+
+  private onPlayerKilled() {
+    sfx.death();
+    this.hud.death.classList.remove('show');
+    void this.hud.death.offsetWidth;
+    this.hud.death.classList.add('show');
+    this.message('VOCÊ FOI ABATIDO — exposto tempo demais', 1300);
+    this.player.reset(this.startPos.x, this.startPos.z);
+    this.mode?.trigger(false, this.mode.time);
+  }
+
   private onShot(info?: ShotInfo) {
+    if (info?.melee) {
+      this.vm.slash(!!info.heavy);
+      if (info.hitT != null) sfx.stab();
+      else sfx.slash();
+      return;
+    }
     if (this.mode?.weapon.w.kind === 'none') {
       sfx.shot();
       return;
@@ -513,13 +571,17 @@ export class Engine {
     if (m) {
       if (this.state === 'running' || this.state === 'countdown') {
         if (this.movement) {
-          this.player.update(dt / 1000, this.aim.yaw);
+          const ev = this.player.update(dt / 1000, this.aim.yaw);
+          if (ev.step) sfx.step();
+          if (ev.land) sfx.land();
+          if (ev.jumped) sfx.jump();
           this.world.eye.x = this.player.x;
+          this.world.eye.y = this.player.eyeY;
           this.world.eye.z = this.player.z;
         }
         const ratio = this.movement ? this.player.speedRatio : 0;
         m.moveRatio = ratio;
-        m.weapon.setMovement(ratio, this.player.walking);
+        m.weapon.setMovement(ratio, this.player.walking, this.movement && !this.player.onGround, this.movement && this.player.crouching);
       }
       if (this.state === 'countdown') {
         const left = this.countdownEnd - now;
@@ -669,6 +731,10 @@ export class Engine {
   get busy() {
     return this.state !== 'idle' && this.state !== 'done';
   }
+}
+
+function knifeName(id: string) {
+  return ({ tactical: 'TÁTICA', karambit: 'KARAMBIT', balisong: 'BORBOLETA', kunai: 'KUNAI', cleaver: 'CUTELO' } as Record<string, string>)[id] ?? 'TÁTICA';
 }
 
 let _engine: Engine | null = null;

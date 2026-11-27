@@ -83,10 +83,39 @@ class Sfx {
     setTimeout(() => this.tone(1320, 0.2, 'sine', 0.25), 110);
   }
   /** disparo de arma: estalo + corpo grave (rifle) ou mais seco (pistola) */
-  gun(kind: 'rifle' | 'pistol' | 'none') {
-    if (kind === 'none') return this.shot();
+  gun(kind: 'rifle' | 'pistol' | 'knife' | 'none') {
+    if (kind === 'none' || kind === 'knife') return this.shot();
     this.noise(kind === 'rifle' ? 0.09 : 0.12, 0.32, kind === 'rifle' ? 900 : 600);
     this.tone(kind === 'rifle' ? 110 : 80, kind === 'rifle' ? 0.08 : 0.12, 'triangle', 0.35, -40);
+  }
+  step() {
+    this.noise(0.07, 0.12, 300);
+    this.tone(70, 0.06, 'sine', 0.12);
+  }
+  jump() {
+    this.noise(0.05, 0.06, 500);
+  }
+  land() {
+    this.noise(0.1, 0.16, 200);
+    this.tone(60, 0.08, 'sine', 0.15);
+  }
+  slash() {
+    this.noise(0.14, 0.14, 2200);
+  }
+  stab() {
+    this.noise(0.08, 0.16, 1400);
+    this.tone(420, 0.08, 'triangle', 0.18, -150);
+  }
+  equip(kind: string) {
+    if (kind === 'knife') this.tone(2400, 0.12, 'sine', 0.08, 900);
+    else {
+      this.tone(320, 0.04, 'square', 0.06);
+      setTimeout(() => this.tone(520, 0.04, 'square', 0.06), 120);
+    }
+  }
+  death() {
+    this.tone(180, 0.35, 'sawtooth', 0.18, -120);
+    this.noise(0.25, 0.2, 400);
   }
   reload() {
     this.tone(500, 0.05, 'square', 0.06);

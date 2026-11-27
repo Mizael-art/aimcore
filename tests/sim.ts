@@ -25,6 +25,8 @@ export interface BotOpts {
   /** ruído gaussiano no fator de overshoot de cada flick */
   noise?: number;
   noiseSeed?: number;
+  /** duelo: fica em startX atrás da parede e vai para peekX quando há alvo */
+  peek?: { startX: number; peekX: number };
 }
 
 export function runBot(cfg: ModeConfig, o: BotOpts) {
@@ -58,6 +60,7 @@ export function runBot(cfg: ModeConfig, o: BotOpts) {
   while (!mode.done && guard++ < 200000) {
     // simula strafe (counter-strafe drill): move sem alvo, para quando ele aparece
     mode.moveRatio = world.targets.length ? 0 : 1;
+    if (o.peek) world.eye.x = world.targets.length ? o.peek.peekX : o.peek.startX;
     mode.tick(frame);
     const t = world.targets[0];
     if (!t) continue;

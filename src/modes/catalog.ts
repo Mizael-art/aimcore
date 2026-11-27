@@ -128,6 +128,16 @@ export const SCENARIOS: ScenarioDef[] = [
     tags: ['Vandal', 'ADAD', 'WASD'], params: { movement: true, minDist: 12, maxDist: 22, motion: 'strafe', strafeSpeed: 1, strafeRange: 2.2, boundYaw: 35 },
   },
   {
+    id: 'peek', name: 'Peek & Duelo', mode: 'headshot', weapon: 'vandal', duration: 90,
+    desc: 'Beco estreito: você começa atrás da parede. Dê peek com A/D, pare, mate quem segura o ângulo e volte. Ficou exposto demais? Ele te acerta.',
+    tags: ['Vandal', 'WASD', 'Duelo', 'Beco'], params: { movement: true, map: 'alley', layout: 'alley', duel: true, botReaction: 460, count: 1, respawnDelay: 500, startX: -1.3, startZ: 1.1, startYaw: -16, zoneMinX: -2.8, zoneMaxX: 3.6, zoneMinZ: -1.3, zoneMaxZ: 1.4 },
+  },
+  {
+    id: 'peek-hard', name: 'Peek & Duelo — Radiante', mode: 'headshot', weapon: 'vandal', duration: 90,
+    desc: 'Mesmo beco, inimigos com reação de ~280 ms e dois ângulos segurados ao mesmo tempo. Só passa quem limpa um ângulo por vez.',
+    tags: ['Vandal', 'WASD', 'Duelo', 'Difícil'], params: { movement: true, map: 'alley', layout: 'alley', duel: true, botReaction: 280, swingBonus: 120, count: 2, respawnDelay: 400, startX: -1.3, startZ: 1.1, startYaw: -16, zoneMinX: -2.8, zoneMaxX: 3.6, zoneMinZ: -1.3, zoneMaxZ: 1.4 },
+  },
+  {
     id: 'counterstrafe', name: 'Counter-Strafe', mode: 'headshot', weapon: 'vandal', duration: 60,
     desc: 'Use A/D: o inimigo só aparece enquanto você se move. Pare com a tecla oposta e atire — tiro correndo é impreciso.',
     tags: ['Vandal', 'WASD', 'Movimento'], params: { movement: true, requireMove: true, minDist: 10, maxDist: 20, motion: 'mixed', strafeSpeed: 0.7, boundYaw: 30, respawnDelay: 350 },

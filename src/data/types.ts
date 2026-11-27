@@ -54,6 +54,8 @@ export interface Settings {
   showWeapon: boolean;
   /** permite WASD também nos cenários sem movimento obrigatório */
   movementAlways: boolean;
+  /** faca equipada (slot 3) */
+  knife: string;
 }
 
 export interface Trial {
@@ -96,6 +98,7 @@ export interface SessionRecord {
   falseStarts?: number;
   crosshairPlacement?: number; // erro vertical médio (graus) no momento em que o alvo aparece
   movingShots?: number; // tiros com imprecisão de movimento
+  deaths?: number; // vezes que o inimigo te acertou (duelo)
   /** pontuações por segmento (para consistência intra-sessão) */
   segments: number[];
   trials?: Trial[];

@@ -6,7 +6,7 @@
 export interface WeaponProfile {
   id: string;
   name: string;
-  kind: 'rifle' | 'pistol' | 'none';
+  kind: 'rifle' | 'pistol' | 'knife' | 'none';
   auto: boolean;
   fireIntervalMs: number;
   baseSpread: number;
@@ -27,6 +27,12 @@ export interface WeaponProfile {
   moveSpread: number;
   /** imprecisão extra andando (shift) */
   walkSpread: number;
+  /** tempo para sacar a arma (ms) */
+  equipMs?: number;
+  /** alcance do golpe (faca) */
+  meleeRange?: number;
+  /** dano do golpe forte (botão direito da faca) */
+  heavyDmg?: number;
 }
 
 /** gera um padrão: sobe nos primeiros tiros e depois oscila na horizontal */
@@ -48,16 +54,24 @@ export const WEAPONS: Record<string, WeaponProfile> = {
     moveSpread: 0, walkSpread: 0,
   },
   sheriff: {
+    equipMs: 600,
     id: 'sheriff', name: 'Sheriff', kind: 'pistol', auto: false, fireIntervalMs: 250, baseSpread: 0.15, spreadPerShot: 0.5, maxSpread: 3,
     recoveryPerSec: 3, headDmg: 159, bodyDmg: 55, zoom: 1.15, adsSpreadMul: 0.8, mag: 6, reloadMs: 2250,
     pattern: pattern([0, 1.1, 2.0, 2.7, 3.2, 3.5], 0.8, 6), patternRecovery: 4, moveSpread: 2.5, walkSpread: 1.0,
   },
   vandal: {
+    equipMs: 750,
     id: 'vandal', name: 'Vandal', kind: 'rifle', auto: true, fireIntervalMs: 1000 / 9.75, baseSpread: 0.1, spreadPerShot: 0.18, maxSpread: 1.6,
     recoveryPerSec: 2.5, headDmg: 160, bodyDmg: 40, zoom: 1.25, adsSpreadMul: 0.75, mag: 25, reloadMs: 2500,
     pattern: pattern([0, 0.15, 0.45, 0.85, 1.35, 1.85, 2.3, 2.65, 2.9, 3.05], 0.9, 25), patternRecovery: 10, moveSpread: 4.5, walkSpread: 1.8,
   },
+  knife: {
+    id: 'knife', name: 'Faca', kind: 'knife', auto: false, fireIntervalMs: 420, baseSpread: 0, spreadPerShot: 0, maxSpread: 0,
+    recoveryPerSec: 100, headDmg: 75, bodyDmg: 50, zoom: 1, adsSpreadMul: 1, mag: 0, reloadMs: 0, pattern: [[0, 0]], patternRecovery: 100,
+    moveSpread: 0, walkSpread: 0, equipMs: 350, meleeRange: 2.6, heavyDmg: 75,
+  },
   phantom: {
+    equipMs: 750,
     id: 'phantom', name: 'Phantom', kind: 'rifle', auto: true, fireIntervalMs: 1000 / 11, baseSpread: 0.12, spreadPerShot: 0.15, maxSpread: 1.4,
     recoveryPerSec: 2.8, headDmg: 156, bodyDmg: 39, zoom: 1.25, adsSpreadMul: 0.75, mag: 30, reloadMs: 2500,
     pattern: pattern([0, 0.1, 0.35, 0.7, 1.1, 1.5, 1.85, 2.15, 2.35, 2.5], 0.7, 30), patternRecovery: 11, moveSpread: 4.0, walkSpread: 1.6,
@@ -87,12 +101,13 @@ export class WeaponState {
     return this.reloadUntil > 0;
   }
   canFire(now: number) {
+    if (now < this.equipUntil) return false;
     if (this.reloadUntil > 0) return false;
     if (this.w.mag > 0 && this.ammo <= 0) return false;
     return now - this.lastShot >= this.w.fireIntervalMs - 0.5;
   }
   currentSpread() {
-    return (this.spread + this.moveErr) * (this.ads ? this.w.adsSpreadMul : 1);
+    return (this.spread + this.moveErr) * (this.ads ? this.w.adsSpreadMul : 1) * (this.crouching ? 0.85 : 1);
   }
   /** deslocamento do padrão de recuo para o próximo tiro (graus) */
   recoil(): [number, number] {
@@ -113,14 +128,19 @@ export class WeaponState {
     this.holding = false;
     return true;
   }
-  /** movimento: speedRatio = |v| / velocidade de corrida; walking = shift */
-  setMovement(speedRatio: number, walking: boolean) {
-    if (speedRatio <= ACCURATE_SPEED) this.moveErr = 0;
+  /** movimento: speedRatio = |v| / velocidade de corrida; walking = shift; no ar = máxima imprecisão */
+  setMovement(speedRatio: number, walking: boolean, airborne = false, crouching = false) {
+    if (airborne) this.moveErr = this.w.moveSpread * 1.6;
+    else if (speedRatio <= ACCURATE_SPEED) this.moveErr = 0;
     else {
       const k = (speedRatio - ACCURATE_SPEED) / (1 - ACCURATE_SPEED);
-      this.moveErr = (walking ? this.w.walkSpread : this.w.moveSpread) * Math.min(1, k);
+      this.moveErr = (walking || crouching ? this.w.walkSpread : this.w.moveSpread) * Math.min(1, k);
     }
+    this.crouching = crouching;
   }
+  crouching = false;
+  /** sacando a arma até este instante (ms de jogo) */
+  equipUntil = 0;
   update(dtSec: number, now: number) {
     this.spread = Math.max(this.w.baseSpread, this.spread - this.w.recoveryPerSec * dtSec);
     const since = now - this.lastShot;

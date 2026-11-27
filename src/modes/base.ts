@@ -27,6 +27,9 @@ export interface WorldApi {
 
 export interface ShotInfo {
   dir: V3;
+  /** golpe de faca (true) ou tiro */
+  melee?: boolean;
+  heavy?: boolean;
   /** distância até o alvo atingido (null = não acertou alvo) */
   hitT: number | null;
   part?: HitPart;
@@ -35,6 +38,10 @@ export interface ShotInfo {
 export interface Feedback {
   shot(info?: ShotInfo): void;
   reload?(ms: number): void;
+  /** troca de arma (id do perfil) */
+  equip?(id: string): void;
+  /** o inimigo te acertou (cenários de duelo) */
+  playerKilled?(by: Target): void;
   hit(t: Target, part: HitPart, kill: boolean): void;
   miss(): void;
   falseStart(): void;
@@ -88,12 +95,24 @@ export abstract class Mode {
   moveRatio = 0;
   /** tiros disparados com imprecisão de movimento (sem counter-strafe) */
   movingShots = 0;
+  /** inventário: 1 = primária, 2 = secundária, 3 = faca */
+  slots: string[] = [];
+  private states = new Map<string, WeaponState>();
+  /** golpe atual é forte (faca, botão direito) */
+  meleeHeavy = false;
+  /** mortes do jogador (duelo) */
+  deaths = 0;
 
   constructor(public cfg: ModeConfig) {
     this.rng = new Rng(cfg.seed);
     this.fxRng = new Rng(cfg.seed ^ 0x5bd1e995);
     this.weapon = new WeaponState(WEAPONS[cfg.weapon ?? 'trainer'] ?? WEAPONS.trainer);
     this.durationMs = cfg.duration * 1000;
+    if (this.weapon.w.kind !== 'none') {
+      const primary = this.weapon.w.id;
+      this.slots = primary === 'sheriff' ? ['sheriff', 'sheriff', 'knife'] : [primary, 'sheriff', 'knife'];
+      this.states.set(primary, this.weapon);
+    }
   }
 
   p<T extends number | string | boolean>(k: string, d: T): T {
@@ -154,12 +173,51 @@ export abstract class Mode {
     if (down && this.weapon.canFire(at)) this.fire(at);
   }
 
+  /** Troca de arma pelo slot (0 = primária, 1 = secundária, 2 = faca). */
+  switchSlot(slot: number): string | null {
+    const id = this.slots[slot];
+    if (!id || this.done || id === this.weapon.w.id) return null;
+    let st = this.states.get(id);
+    if (!st) {
+      st = new WeaponState(WEAPONS[id]);
+      this.states.set(id, st);
+    }
+    this.weapon.holding = false;
+    this.weapon.ads = false;
+    st.reloadUntil = 0; // trocar cancela a recarga
+    st.holding = false;
+    st.equipUntil = this.time + (st.w.equipMs ?? 500);
+    this.weapon = st;
+    this.ctx.fb.equip?.(id);
+    return id;
+  }
+
+  /** Golpe forte da faca (botão direito). */
+  heavyMelee(at: number) {
+    if (this.weapon.w.kind !== 'knife' || this.done || at - this.weapon.lastShot < 950 || at < this.weapon.equipUntil) return;
+    this.meleeHeavy = true;
+    this.melee(at);
+    this.meleeHeavy = false;
+  }
+
+  private melee(at: number) {
+    this.shots++;
+    this.weapon.lastShot = at;
+    const dir = dirFromYawPitch(this.ctx.aim.yaw, this.ctx.aim.pitch);
+    const res = this.raycast(dir);
+    const inRange = res && res.t <= (this.weapon.w.meleeRange ?? 2.5);
+    this.ctx.fb.shot({ dir, hitT: inRange ? res!.t : null, part: inRange ? res!.part : undefined, melee: true, heavy: this.meleeHeavy });
+    if (inRange) this.onTargetHit(res!.target, res!.part, at);
+    else this.onMissShot(at);
+  }
+
   setAds(on: boolean) {
     this.weapon.ads = on && this.weapon.w.zoom > 1;
   }
 
   /** Dispara um raio do centro da mira (padrão de recuo + spread + imprecisão de movimento). */
   fire(at: number) {
+    if (this.weapon.w.kind === 'knife') return this.melee(at);
     this.shots++;
     if (this.weapon.moveErr > 0) this.movingShots++;
     const [rp, ry] = this.weapon.recoil();
@@ -270,7 +328,8 @@ export abstract class Mode {
       trials: this.trials.map((t) => ({ ...t, t: Math.round(t.t), dist: Math.round(t.dist * 100) / 100, stopErr: Math.round(t.stopErr * 100) / 100 })),
       crosshairPlacement: this.placementErrs.length ? meanSd(this.placementErrs).mean : undefined,
       completed: meta.completed,
-      movingShots: this.weapon.w.moveSpread > 0 ? this.movingShots : undefined,
+      movingShots: this.slots.length ? this.movingShots : undefined,
+      deaths: this.cfg.params?.duel ? this.deaths : undefined,
       ...this.extraRecord(),
     };
   }

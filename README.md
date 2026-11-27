@@ -7,7 +7,7 @@ Aim trainer 3D de navegador focado em VALORANT: sensibilidade real do jogo, 7 mo
 ```bash
 npm install
 npm run dev      # desenvolvimento (http://localhost:5173)
-npm test         # 46 testes (matemática, colisão, bots jogando todos os modos, Sensitivity Lab)
+npm test         # 51 testes (matemática, colisão, bots jogando todos os modos, Sensitivity Lab)
 npm run build    # gera dist/index.html (arquivo único, abre direto no navegador)
 ```
 
@@ -22,6 +22,10 @@ Use Chrome ou Edge para entrada bruta (`unadjustedMovement`). Firefox funciona, 
 - Movimento **WASD** + **Shift** nos cenários marcados: atirar correndo é impreciso; counter-strafe (tecla oposta) zera a imprecisão rápido. A barra MOV fica vermelha quando o tiro sai impreciso.
 - Mira com linhas internas/externas, erro de disparo e **importação de código de mira do VALORANT**.
 - Kill feed, contador de abates em sequência e cenário **Counter-Strafe**.
+- **Peek & Duelo** (normal e Radiante): mapa Beco, você começa atrás da parede e dá peek com A/D; o inimigo segura o ângulo e te acerta se você ficar exposto mais que o tempo de reação dele (swing rápido dá vantagem, como peeker's advantage).
+- Movimento completo: correr, andar (Shift), agachar (C), pular (Espaço, tiro no ar é impreciso), passos audíveis só correndo.
+- Inventário **1 primária · 2 Sheriff · 3 faca**, com tempo de saque, **F** para inspecionar.
+- **5 facas originais** (Tática, Karambit, Borboleta, Kunai, Cutelo) com corte (esq.), estocada (dir.) e inspeção — escolha em Configurações → Arsenal.
 
 ## Sensibilidade
 
